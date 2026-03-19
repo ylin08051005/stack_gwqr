@@ -11,6 +11,7 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+from tensorflow.keras import regularizers  # ★ 新增：用於 L2 正則化
 import optuna
 from optuna.samplers import TPESampler
 from sklearn.model_selection import KFold
@@ -42,23 +43,35 @@ def build_dnn(input_dim, quantile, lr,
     
     inp = layers.Input(shape=(input_dim,), name='input')
 
-    x = layers.Dense(units[0], activation='relu', kernel_initializer='he_normal')(inp)
+    # 第一層 (加上 L2 安全閥)
+    x = layers.Dense(units[0], activation='relu', 
+                     kernel_initializer='he_normal',
+                     kernel_regularizer=regularizers.l2(1e-4))(inp)
     if use_bn: x = layers.BatchNormalization()(x)
     x = layers.Dropout(dropouts[0])(x)
     skip = x 
 
-    x = layers.Dense(units[1], activation='relu', kernel_initializer='he_normal')(x)
+    # 第二層 (加上 L2 安全閥)
+    x = layers.Dense(units[1], activation='relu', 
+                     kernel_initializer='he_normal',
+                     kernel_regularizer=regularizers.l2(1e-4))(x)
     if use_bn: x = layers.BatchNormalization()(x)
     x = layers.Dropout(dropouts[1])(x)
 
+    # 殘差連接 (Skip Connection)
     if units[0] != units[1]:
-        skip_proj = layers.Dense(units[1], use_bias=False, kernel_initializer='he_normal')(skip)
+        skip_proj = layers.Dense(units[1], use_bias=False, 
+                                 kernel_initializer='he_normal',
+                                 kernel_regularizer=regularizers.l2(1e-4))(skip)
     else:
         skip_proj = skip
     x = layers.Add()([x, skip_proj])
 
+    # 迴圈建立後續的隱藏層 (加上 L2 安全閥)
     for i in range(2, len(units)):
-        x = layers.Dense(units[i], activation='relu', kernel_initializer='he_normal')(x)
+        x = layers.Dense(units[i], activation='relu', 
+                         kernel_initializer='he_normal',
+                         kernel_regularizer=regularizers.l2(1e-4))(x)
         if use_bn: x = layers.BatchNormalization()(x)
         x = layers.Dropout(dropouts[i])(x)
 
@@ -66,7 +79,10 @@ def build_dnn(input_dim, quantile, lr,
     model = keras.Model(inputs=inp, outputs=out)
 
     loss = 'mse' if quantile == 'mean' else quantile_loss_fn(float(quantile))
-    model.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss=loss)
+    
+    # ★ 安全閥: clipnorm=1.0 限制梯度爆炸
+    optimizer = keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
+    model.compile(optimizer=optimizer, loss=loss)
     return model
 
 
@@ -158,7 +174,9 @@ def save_detailed_predictions(predictions_dict, index_file, raw_data_path, outpu
         preds = predictions_dict[q]
         if len(preds) != len(df_output): continue
         col_name = f'pred_{q}'
-        df_output[col_name] = np.expm1(preds)
+        
+        # ★ 安全閥: 限制預測最大值不超過 20.0，避免 expm1 溢位
+        df_output[col_name] = np.expm1(np.clip(preds, a_min=None, a_max=20.0))
         quantile_cols.append(col_name)
 
     if len(quantile_cols) > 1:
@@ -271,12 +289,14 @@ def main():
     print(f"{'='*60}")
 
     y_test_real = np.expm1(y_test)
-    predictions_test_real = {k: np.expm1(v) for k, v in predictions_test.items()}
+    
+    # ★ 安全閥: 限制 log 預測值最大不超過 20.0 (約 4.85 億台幣)，防止 expm1 溢位爆炸
+    predictions_test_real = {k: np.expm1(np.clip(v, a_min=None, a_max=20.0)) for k, v in predictions_test.items()}
 
     results_df = evaluate_predictions(y_test_real, predictions_test_real, quantiles, "DNN")
     
     # =========================================================
-    # 關鍵修改：提前計算執行時間，並新增為 CSV 的一個新欄位
+    # 關鍵修改：計算執行時間，並新增為 CSV 的一個新欄位
     # =========================================================
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -284,7 +304,6 @@ def main():
     minutes, seconds = divmod(rem, 60)
     time_str = f"{int(hours)} 小時 {int(minutes)} 分鐘 {seconds:.2f} 秒"
     
-    # 將時間寫入 DataFrame
     results_df['Execution_Time'] = time_str
     # =========================================================
 

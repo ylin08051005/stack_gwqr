@@ -35,22 +35,31 @@ def quantile_loss_fn(tau):
     return loss
 
 
+from tensorflow.keras import regularizers # 新增這行
+
 def build_nn(input_dim, quantile, lr, units_1=64, units_2=32,
              dropout_1=0.2, dropout_2=0.2):
     model = keras.Sequential([
         layers.Input(shape=(input_dim,)),
         layers.Dense(units_1, activation='relu',
-                     kernel_initializer='he_normal', name='dense_1'),
+                     kernel_initializer='he_normal', 
+                     kernel_regularizer=regularizers.l2(1e-4), # ★ 安全閥 1: L2 權重懲罰
+                     name='dense_1'),
+        layers.BatchNormalization(), # ★ 安全閥 2: 批次標準化，穩定數值
         layers.Dropout(dropout_1, name='dropout_1'),
         layers.Dense(units_2, activation='relu',
-                     kernel_initializer='he_normal', name='dense_2'),
+                     kernel_initializer='he_normal', 
+                     kernel_regularizer=regularizers.l2(1e-4), # ★ 安全閥 1
+                     name='dense_2'),
+        layers.BatchNormalization(), # ★ 安全閥 2
         layers.Dropout(dropout_2, name='dropout_2'),
         layers.Dense(1, name='output'),
     ])
 
     loss = 'mse' if quantile == 'mean' else quantile_loss_fn(float(quantile))
-    model.compile(optimizer=keras.optimizers.Adam(learning_rate=lr),
-                  loss=loss)
+    # ★ 安全閥 3: clipnorm=1.0 限制梯度爆炸
+    optimizer = keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0) 
+    model.compile(optimizer=optimizer, loss=loss)
     return model
 
 
@@ -152,7 +161,8 @@ def save_detailed_predictions(predictions_dict, index_file,
         if len(preds) != len(df_output):
             continue
         col_name = f'pred_{q}'
-        df_output[col_name] = np.expm1(preds)
+        # ★ 安全閥: 同樣在這裡限制最大值
+        df_output[col_name] = np.expm1(np.clip(preds, a_min=None, a_max=20.0))
         quantile_cols.append(col_name)
 
     if len(quantile_cols) > 1:
@@ -285,7 +295,9 @@ def main():
     print(f"{'='*60}")
 
     y_test_real = np.expm1(y_test)
-    predictions_test_real = {k: np.expm1(v) for k, v in predictions_test.items()}
+    
+    # ★ 安全閥 4: 限制 log 預測值最大不超過 20.0 (約 4.8 億台幣)，防止 expm1 溢位爆炸
+    predictions_test_real = {k: np.expm1(np.clip(v, a_min=None, a_max=20.0)) for k, v in predictions_test.items()}
 
     results_df = evaluate_predictions(y_test_real, predictions_test_real,
                                       quantiles, "NN")
