@@ -4,5 +4,13 @@ __pycache__/
 *.pyc
 .DS_Store
 *.dylib.ipynb_checkpoints/
+<<<<<<< HEAD
 *.pkl
 models/
+=======
+models/
+*.pkl
+*.keras
+*.json
+*.txt
+>>>>>>> 8b6073e (ignore model files)

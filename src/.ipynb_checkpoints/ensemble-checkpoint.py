@@ -26,7 +26,7 @@ def main():
     os.makedirs(eval_base_dir, exist_ok=True)
     
     # 模型與分位數列表
-    models = ['xgboost', 'rf', 'lgb', 'nn', 'dnn', 'cnn'] 
+    models = ['xgboost', 'rf', 'lgb', 'nn'] 
     quantiles = config['data']['quantiles']
     all_quantiles = ['mean'] + quantiles
     
