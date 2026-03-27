@@ -1,0 +1,13 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.dylib.ipynb_checkpoints/
+*.pkl
+models/
+models/
+*.pkl
+*.keras
+*.json
+*.txt
