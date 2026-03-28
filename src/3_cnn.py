@@ -165,7 +165,7 @@ def main():
     start_time = time.time()
     config = load_config(os.path.join(parent_dir, 'config.yaml'))
     seed = config['project']['random_seed']
-    EXP_LEVEL = "L4"
+    EXP_LEVEL = "L1"
     target_year = '112' 
     
     print("=" * 60)

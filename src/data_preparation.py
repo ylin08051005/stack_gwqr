@@ -14,7 +14,7 @@ import re
 sys.path.append('..')
 from utils import load_config, create_directories, save_model
 
-EXPERIMENT_LEVEL = 4
+EXPERIMENT_LEVEL = 1
 
 # =====================================================================
 # ★ 全局設定：指定要處理的年份 (例如 '112' 或 '113')
