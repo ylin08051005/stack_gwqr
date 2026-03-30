@@ -122,7 +122,7 @@ def save_detailed_predictions(predictions_dict, y_true_real, indices, raw_data_p
 def main():
     start_time = time.time()
     config = load_config(os.path.join(parent_dir, 'config.yaml'))
-    EXP_LEVEL = "L1"
+    EXP_LEVEL = "L3"
     target_year = '112' 
     
     print("=" * 60)

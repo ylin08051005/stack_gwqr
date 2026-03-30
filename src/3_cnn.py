@@ -165,8 +165,8 @@ def main():
     start_time = time.time()
     config = load_config(os.path.join(parent_dir, 'config.yaml'))
     seed = config['project']['random_seed']
-    EXP_LEVEL = "L1"
-    target_year = '112' 
+    EXP_LEVEL = "L3"
+    target_year = '113' 
     
     print("=" * 60)
     print(" CNN Quantile Regression 兩階段驗證：70% Train (5-Fold OOF) + 30% Test Ensemble")
