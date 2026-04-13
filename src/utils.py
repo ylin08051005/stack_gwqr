@@ -177,7 +177,7 @@ def evaluate_predictions(y_true: np.ndarray,
 def save_model(model, filepath: str):
     with open(filepath, 'wb') as f:
         pickle.dump(model, f)
-    print(f"模型已經存到{filepath}")
+    print(f"模型已存到{filepath}")
 
 
 def load_model(filepath: str):

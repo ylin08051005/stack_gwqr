@@ -1,7 +1,7 @@
 project:
   name: "house_price_quantile_regression"
   random_seed: 42
-  n_jobs: 4  # 使用所有CPU核心
+  n_jobs: 4 
 
 data:
   train_test_split: 0.2
@@ -16,7 +16,7 @@ paths:
 hyperparameter_tuning:
   n_trials: 100
   cv_folds: 5
-  timeout: null  # 1小時
+  timeout: null
 
 models:
   xgboost:
@@ -38,10 +38,6 @@ models:
     learning_rate_range: [0.01, 0.3]
     num_leaves_range: [20, 100]
     subsample_range: [0.6, 1.0]
-    
-  # ========================================
-  # 神經網路模型配置（NN / DNN / CNN）
-  # ========================================
   
   nn:
     description: "Simple NN - baseline model"

@@ -1,11 +1,10 @@
 """
-data_preparation.py
-資料預處理與特徵工程 (70% Train / 30% Test 切分 + Train 內部 5-Fold)
+資料預處理 (70% Train / 30% Test + Train 5-Fold)
 """
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import KFold, train_test_split  # ★ 新增 train_test_split
+from sklearn.model_selection import KFold, train_test_split
 import sys
 import os
 import glob
@@ -16,14 +15,9 @@ from utils import load_config, create_directories, save_model
 
 EXPERIMENT_LEVEL = 3
 
-# =====================================================================
-# ★ 全局設定：指定要處理的年份 (例如 '112' 或 '113')
-# =====================================================================
 TARGET_YEAR = '112' 
 
-# =====================================================================
 # 樓層文字轉數值工具集
-# =====================================================================
 cn_nums = {
     '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
     '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15, '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
@@ -71,7 +65,7 @@ def get_features_by_level(level):
     elif level == 4:
         return base_features + f_building + f_socio + f_env + f_weather, "Model_4_Weather"
     else:
-        raise ValueError("EXPERIMENT_LEVEL 必須設定為 1~4 之間")
+        raise ValueError("EXPERIMENT_LEVEL 錯誤")
 
 def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -83,10 +77,6 @@ def main():
     seed = config['project']['random_seed']
     np.random.seed(seed)
     
-    print("=" * 60)
-    print(f"資料準備與特徵工程階段 (專屬 {TARGET_YEAR} 年度，70% Train / 30% Test 切分)")
-    print("=" * 60)
-    
     features, exp_name = get_features_by_level(EXPERIMENT_LEVEL)
     target = config['data']['target'] 
     
@@ -95,7 +85,7 @@ def main():
     all_files = glob.glob(search_pattern)
     
     if not all_files:
-        print(f"\n❌ 錯誤: 在 {raw_dir} 找不到符合格式的檔案！")
+        print(f"\n 在 {raw_dir} 找不到符合格式的檔案")
         return
         
     time_mapping = {
@@ -106,7 +96,7 @@ def main():
     }
     
     df_list = []
-    print(f"\n開始載入與合併各期資料 (嚴格過濾 {TARGET_YEAR} 年)...")
+    print(f"\n開始載入與合併{TARGET_YEAR} 年各期資料")
     for file in all_files:
         filename = os.path.basename(file)
         match = re.search(fr'{TARGET_YEAR}[1-4]', filename) 
@@ -127,15 +117,14 @@ def main():
 
             tmp_df['time_index'] = time_mapping.get(quarter_key, 0)
             df_list.append(tmp_df)
-            print(f"  - 成功載入 {filename} ({len(tmp_df)} 筆)")
+            print(f"成功載入 {filename} ({len(tmp_df)} 筆)")
             
     if not df_list:
-        print(f"\n❌ 錯誤: 在資料夾中找不到任何 {TARGET_YEAR} 年的 CSV 檔案！")
+        print(f"\n 在資料夾中找不到任何 {TARGET_YEAR} 年的 CSV 檔案")
         return
 
     df = pd.concat(df_list, ignore_index=True)
     
-    print("\n執行資料清洗與時間過濾...")
     ghost_cols = [col for col in df.columns if 'Unnamed' in str(col)]
     df.drop(columns=ghost_cols, inplace=True, errors='ignore')
     
@@ -146,7 +135,7 @@ def main():
     df = df[df['time_index'].between(1, 4)].copy()
     df.reset_index(drop=True, inplace=True)
 
-    print("\n執行樓層文字轉換 (產生 count_floor)...")
+    print("\n 產生 count_floor")
     df['count_floor'] = df.apply(convert_floor, axis=1)
     
     cols = df.columns.tolist()
@@ -157,8 +146,8 @@ def main():
 
     combined_raw_path = os.path.join(raw_dir, f'realprice_combined_{TARGET_YEAR}_all.csv')
     df.to_csv(combined_raw_path, index=False, encoding='utf-8-sig')
-    print(f"  ✅ 清洗完成的原始資料已儲存至: {combined_raw_path}")
-    print(f"  📊 合併後總筆數為: {len(df)} 筆")
+    print(f"清洗完成的原始資料已儲存至: {combined_raw_path}")
+    print(f"合併後總筆數為: {len(df)} 筆")
     
     for col in features:
         if df[col].isnull().sum() > 0:
@@ -167,7 +156,7 @@ def main():
             else:
                 df[col] = df[col].fillna(df[col].mode()[0])
     
-    print(f"\n執行目標變數 ({target}) Log 轉換...")
+    print(f"\n執行目標變數 ({target}) Log 轉換")
     df[target] = np.log1p(df[target])
     
     X = df[features].copy()
@@ -175,38 +164,28 @@ def main():
     
     categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
     if categorical_cols:
-        print(f"偵測到類別變數: {categorical_cols}，執行 One-hot encoding...")
+        print(f"偵測到類別變數: {categorical_cols}，做 One-hot encoding...")
         X = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
 
-    # =====================================================================
-    # 4. ★ 70% Train / 30% Test 切分與 Train 內部 5-Fold 標籤配置 ★
-    # =====================================================================
-    print(f"\n執行 70% Train / 30% Test 切分與 Train 內部 5-Fold 標籤配置:")
-    
-    # 先將所有資料的索引分成 Train (70%) 與 Test (30%)
+    print(f"\n執行 70% Train / 30% Test 切分與 Train 內部 5-Fold :")
+
     indices = np.arange(len(X))
     train_idx, test_idx = train_test_split(indices, test_size=0.3, random_state=seed)
     
     # 建立 fold_labels 陣列，預設全為 -1 (代表這 30% 是完全獨立的 Test Set)
     fold_labels = np.full(len(X), -1, dtype=int)
     
-    # 只針對那 70% 的 Train Data 進行 5-Fold 切分
+    # 只針對 70% 的 Train Data 5-Fold 切分
     kf = KFold(n_splits=5, shuffle=True, random_state=seed)
     
     for fold_idx, (tr_idx, val_idx) in enumerate(kf.split(train_idx)):
-        # val_idx 是在 train_idx 陣列裡的相對位置，我們需要把它轉回原始的絕對位置
         real_val_idx = train_idx[val_idx]
         fold_labels[real_val_idx] = fold_idx
-        print(f"  - 劃分 Train Fold {fold_idx}: 包含 {len(real_val_idx)} 筆驗證資料")
+        print(f" Train Fold {fold_idx}: 包含 {len(real_val_idx)} 筆驗證資料")
         
-    print(f"  - 獨立保留 30% Test Set: 包含 {len(test_idx)} 筆盲測資料 (標記為 Fold -1)")
+    print(f" 保留 30% Test Set: 包含 {len(test_idx)} 筆盲測資料 (標記為 Fold -1)")
     
     X['fold'] = fold_labels 
-
-    # =====================================================================
-    # 5. 特徵標準化與儲存 (★ 嚴格防止資料洩漏：只用 Train Fit)
-    # =====================================================================
-    print("\n執行特徵標準化 (智慧分流：保留虛擬變數與 fold 標籤原貌)...")
     
     binary_cols = ['fold'] 
     for col in X.columns:
@@ -218,18 +197,17 @@ def main():
             
     continuous_cols = [col for col in X.columns if col not in binary_cols]
     
-    print(f"  - 偵測到 {len(binary_cols)-1} 個二元變數 + 1 個 Fold 標籤 (不進行標準化)")
-    print(f"  - 偵測到 {len(continuous_cols)} 個連續變數 (進行 Z-score 標準化)")
+    print(f" 偵測到 {len(binary_cols)-1} 個二元變數 + 1 個 Fold 標籤 (不進行標準化)")
+    print(f" 偵測到 {len(continuous_cols)} 個連續變數 (進行標準化)")
 
     scaler = StandardScaler()
     X_scaled = X.copy()
     
     if continuous_cols:
-        print("  - [防作弊機制啟動] StandardScaler 僅使用 70% Train Data 進行 Fit")
         train_mask = X['fold'] != -1
-        # Train Data (fold 0~4) 用 fit_transform
+        # Train Data (fold 0~4)用fit_transform
         X_scaled.loc[train_mask, continuous_cols] = scaler.fit_transform(X.loc[train_mask, continuous_cols])
-        # Test Data (fold -1) 只能用 transform (完全沒看過 Test Data)
+        # Test Data (fold -1)只能用transform
         X_scaled.loc[~train_mask, continuous_cols] = scaler.transform(X.loc[~train_mask, continuous_cols])
         
     processed_dir = os.path.join(config['paths']['data_dir'], 'processed')
@@ -240,9 +218,7 @@ def main():
     save_model(scaler, os.path.join(config['paths']['model_dir'], 'scaler.pkl'))
     
     print("\n" + "=" * 60)
-    print(f"🎉 {TARGET_YEAR}年度 資料準備完成！")
-    print(f"請使用輸出的 X_all.csv 進行後續的機器學習。")
-    print(f"(提示：fold == -1 的資料為 30% 獨立 Test Set)")
+    print(f"{TARGET_YEAR}年度資料完成！")
     print("=" * 60)
 
 if __name__ == "__main__":
